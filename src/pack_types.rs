@@ -285,4 +285,9 @@ impl Pack {
             (ip_int & 0xFF) as u8,
         ]
     }
+    
+    // GetNames - get all element names (for debugging)
+    pub fn get_names(&self) -> Vec<String> {
+        self.elements.iter().map(|e| e.name.clone()).collect()
+    }
 }
