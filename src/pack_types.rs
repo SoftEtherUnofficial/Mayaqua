@@ -290,4 +290,136 @@ impl Pack {
     pub fn get_names(&self) -> Vec<String> {
         self.elements.iter().map(|e| e.name.clone()).collect()
     }
+
+    // === TUN/TAP Integration Methods ===
+    
+    // GetNetworkConfig - extract complete network configuration for TUN/TAP setup
+    pub fn get_network_config(&self) -> NetworkConfig {
+        NetworkConfig {
+            client_ip: self.get_ip("client_ip"),
+            client_ip_bytes: self.get_ip_as_bytes("client_ip"),
+            subnet_mask: self.get_ip("subnet_mask"),
+            subnet_mask_bytes: self.get_ip_as_bytes("subnet_mask"),
+            gateway_ip: self.get_ip("gateway_ip"),
+            gateway_ip_bytes: self.get_ip_as_bytes("gateway_ip"),
+            dns_server1: self.get_ip("dns_server1"),
+            dns_server2: self.get_ip("dns_server2"),
+            dhcp_server: self.get_ip("dhcp_server"),
+            domain_name: self.get_str("domain_name"),
+            mtu: self.get_int("mtu"),
+            use_dhcp: self.get_bool("use_dhcp"),
+            lease_time: self.get_int("lease_time"),
+        }
+    }
+
+    // GetTunTapConfig - extract configuration specifically for TUN/TAP device setup
+    pub fn get_tuntap_config(&self, interface_name: &str) -> TunTapConfig {
+        let net_config = self.get_network_config();
+        
+        TunTapConfig {
+            interface_name: interface_name.to_string(),
+            ip_address: net_config.client_ip,
+            subnet_mask: net_config.subnet_mask,
+            mtu: if net_config.mtu > 0 { net_config.mtu } else { 1500 },
+            gateway: net_config.gateway_ip,
+            dns_servers: vec![
+                net_config.dns_server1,
+                net_config.dns_server2,
+            ].into_iter().filter(|dns| !dns.is_empty() && dns != "0.0.0.0").collect(),
+            use_dhcp: net_config.use_dhcp,
+        }
+    }
+
+    // HasValidClientIP - check if packet contains a valid client IP assignment
+    pub fn has_valid_client_ip(&self) -> bool {
+        let ip = self.get_ip("client_ip");
+        !ip.is_empty() && ip != "0.0.0.0" && ip != "255.255.255.255"
+    }
+
+    // ExtractDhcpOptions - extract DHCP options from server response
+    pub fn extract_dhcp_options(&self) -> DhcpOptions {
+        DhcpOptions {
+            subnet_mask: self.get_ip("dhcp_subnet_mask"),
+            router: self.get_ip("dhcp_router"),
+            dns_servers: self.extract_dns_servers(),
+            domain_name: self.get_str("dhcp_domain_name"),
+            lease_time: self.get_int("dhcp_lease_time"),
+            renewal_time: self.get_int("dhcp_renewal_time"),
+            rebinding_time: self.get_int("dhcp_rebinding_time"),
+            broadcast_address: self.get_ip("dhcp_broadcast"),
+        }
+    }
+
+    // Helper method to extract multiple DNS servers
+    fn extract_dns_servers(&self) -> Vec<String> {
+        let mut dns_servers = Vec::new();
+        
+        // Try standard DNS fields
+        let dns1 = self.get_ip("dns_server1");
+        if !dns1.is_empty() && dns1 != "0.0.0.0" {
+            dns_servers.push(dns1);
+        }
+        
+        let dns2 = self.get_ip("dns_server2");
+        if !dns2.is_empty() && dns2 != "0.0.0.0" {
+            dns_servers.push(dns2);
+        }
+        
+        // Try DHCP DNS fields
+        let dhcp_dns1 = self.get_ip("dhcp_dns1");
+        if !dhcp_dns1.is_empty() && dhcp_dns1 != "0.0.0.0" {
+            dns_servers.push(dhcp_dns1);
+        }
+        
+        let dhcp_dns2 = self.get_ip("dhcp_dns2");
+        if !dhcp_dns2.is_empty() && dhcp_dns2 != "0.0.0.0" {
+            dns_servers.push(dhcp_dns2);
+        }
+        
+        dns_servers.dedup();
+        dns_servers
+    }
+}
+
+// Network configuration structure for TUN/TAP setup
+#[derive(Debug, Clone)]
+pub struct NetworkConfig {
+    pub client_ip: String,
+    pub client_ip_bytes: [u8; 4],
+    pub subnet_mask: String,
+    pub subnet_mask_bytes: [u8; 4],
+    pub gateway_ip: String,
+    pub gateway_ip_bytes: [u8; 4],
+    pub dns_server1: String,
+    pub dns_server2: String,
+    pub dhcp_server: String,
+    pub domain_name: String,
+    pub mtu: u32,
+    pub use_dhcp: bool,
+    pub lease_time: u32,
+}
+
+// TUN/TAP specific configuration
+#[derive(Debug, Clone)]
+pub struct TunTapConfig {
+    pub interface_name: String,
+    pub ip_address: String,
+    pub subnet_mask: String,
+    pub mtu: u32,
+    pub gateway: String,
+    pub dns_servers: Vec<String>,
+    pub use_dhcp: bool,
+}
+
+// DHCP options extracted from server response
+#[derive(Debug, Clone)]
+pub struct DhcpOptions {
+    pub subnet_mask: String,
+    pub router: String,
+    pub dns_servers: Vec<String>,
+    pub domain_name: String,
+    pub lease_time: u32,
+    pub renewal_time: u32,
+    pub rebinding_time: u32,
+    pub broadcast_address: String,
 }
